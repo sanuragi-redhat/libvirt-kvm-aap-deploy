@@ -107,3 +107,34 @@
         - not disk_stat.stat.exists
         - qemu_img_job is defined
         - qemu_img_job.ansible_job_id is defined
+
+    - name: Run virt-install to start VM installation
+      ansible.builtin.command:
+        cmd: >
+          virt-install
+          --name {{ vm_name }}
+          --memory 2048
+          --vcpus {{ cpu_count }}
+          --disk path={{ disk_path }},format=qcow2
+          --cdrom {{ iso_path }}
+          --network network={{ net_name }},model=virtio
+          --os-type linux
+          --os-variant ubuntu22.04
+          --graphics vnc,listen=0.0.0.0
+          --noautoconsole
+      async: 0
+      poll: 0
+      register: virt_install_job
+
+    - name: Inform VM installation started
+      ansible.builtin.debug:
+        msg: "VM installation started with virt-install for VM '{{ vm_name }}'. Connect via VNC or console to complete installation."
+
+    - name: Inform VM installation started
+      ansible.builtin.debug:
+        msg: |
+          VM installation started for '{{ vm_name }}'.
+          You can connect to the VM console via:
+            virsh console {{ vm_name }}
+          or connect to the VNC server (default port 5900 + display number).
+          To exit the console, press Ctrl + ].
