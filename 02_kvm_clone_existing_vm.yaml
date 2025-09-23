@@ -1,0 +1,27 @@
+---
+- name: Clone a KVM virtual machine with user input
+  hosts: localhost
+  become: true
+
+  vars_prompt:
+    - name: src_name
+      prompt: "Enter the source VM name to clone"
+      private: no
+
+    - name: dest_name
+      prompt: "Enter the new destination VM name"
+      private: no
+
+  tasks:
+    - name: Clone VM using virt-clone
+      ansible.builtin.command: >
+        virt-clone
+        --original {{ src_name }}
+        --name {{ dest_name }}
+        --auto-clone
+      register: clone_output
+
+    - name: Show clone command output
+      debug:
+        var: clone_output.stdout_lines
+

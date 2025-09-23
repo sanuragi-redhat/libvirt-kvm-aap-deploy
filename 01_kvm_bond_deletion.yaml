@@ -1,0 +1,43 @@
+---
+- name: Cleanup old bond, VLAN, and bridge configurations
+  hosts: all
+  become: yes
+  vars:
+    bridge1: br-prov
+    bridge2: br-cnv
+    bond: bond0
+    bond_slave0: enp1s0
+    bond_slave1: enp7s0
+    vlan1: 698
+    vlan2: 850
+
+  tasks:
+    - name: Delete bridge connections
+      ansible.builtin.command:
+        cmd: nmcli con del "{{ item }}"
+      loop:
+        - "{{ bridge1 }}"
+        - "{{ bridge2 }}"
+      ignore_errors: yes
+
+    - name: Delete bond connection
+      ansible.builtin.command:
+        cmd: nmcli con del "{{ bond }}"
+      ignore_errors: yes
+
+    - name: Delete bond slave connections
+      ansible.builtin.command:
+        cmd: nmcli con del "{{ item }}"
+      loop:
+        - "{{ bond }}-slave-{{ bond_slave0 }}"
+        - "{{ bond }}-slave-{{ bond_slave1 }}"
+      ignore_errors: yes
+
+    - name: Delete VLAN connections
+      ansible.builtin.command:
+        cmd: nmcli con del "{{ bond }}.{{ item }}"
+      loop:
+        - "{{ vlan1 }}"
+        - "{{ vlan2 }}"
+      ignore_errors: yes
+

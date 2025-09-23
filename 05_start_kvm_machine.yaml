@@ -1,0 +1,86 @@
+---
+- name: Start KVM virtual machine with user input
+  hosts: localhost
+  become: true
+  vars_prompt:
+    - name: src_name
+      prompt: "Enter the source VM name to start (default: service-node)"
+      private: no
+      default: "service-node"
+
+  tasks:
+    - name: Check if VM is already running
+      ansible.builtin.command: >
+        virsh domstate {{ src_name }}
+      register: vm_state
+      changed_when: false
+
+    - name: Print current VM state
+      debug:
+        msg: "Current state of {{ src_name }}: {{ vm_state.stdout }}"
+
+    - name: Start VM if not running
+      ansible.builtin.command: >
+        virsh start {{ src_name }}
+      when: vm_state.stdout != "running"
+      register: start_output
+
+    - name: Print info if VM is already running
+      debug:
+        msg: "{{ src_name }} is already running."
+      when: vm_state.stdout == "running"
+
+    - name: Show start command output
+      debug:
+        var: start_output.stdout_lines
+      when: vm_state.stdout != "running"
+
+    - name: Pause to allow VM to boot and acquire IP
+      ansible.builtin.pause:
+        minutes: 1
+        prompt: "Waiting 1 minute for VM to boot and acquire an IP..."
+
+    - name: Getting {{ src_name }} IP address
+      ansible.builtin.command: >
+        virsh domifaddr {{ src_name }} 
+      register: vm_ip
+
+    - name: Show {{ src_name }} IP address
+      debug:
+        var: vm_ip.stdout_lines
+
+    - name: Extract IPv4 address of VM (excluding loopback)
+      set_fact:
+        vm_ipv4: >-
+          {{ (vm_ip.stdout_lines
+              | select('search', 'ipv4')
+              | reject('search', '127.')
+              | list)[0].split()[-1].split('/')[0] }}
+
+    - name: Ensure {{ src_name }} entry exists in /etc/hosts (only if not present)
+      ansible.builtin.lineinfile:
+        path: /etc/hosts
+        line: "{{ vm_ipv4 }} {{ src_name }}"
+        state: present
+        insertafter: EOF
+        regexp: '^\s*\d+\.\d+\.\d+\.\d+\s+{{ src_name }}$'
+      when: vm_ipv4 is defined and vm_ipv4 != ''
+
+    - name: Create .ssh directory
+      ansible.builtin.file:
+        path: /root/.ssh
+        state: directory
+        mode: 0700
+
+    - name: Copy SSH public key to authorized_keys
+      ansible.builtin.copy:
+        src: ~/.ssh/id_rsa.pub
+        dest: /root/.ssh/authorized_keys
+        mode: '0600'
+        
+    - name: Set authorized key taken from file
+      ansible.posix.authorized_key:
+        user: root
+        state: present
+        key: "{{ lookup('file', '/root/.ssh/id_rsa.pub') }}"
+

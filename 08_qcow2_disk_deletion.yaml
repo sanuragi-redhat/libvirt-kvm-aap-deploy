@@ -1,0 +1,43 @@
+---
+- name: Delete VM QCOW2 disk image safely
+  hosts: localhost
+  gather_facts: false
+  vars_prompt:
+    - name: "vm_name"
+      prompt: "Enter qcow2 disk name to delete"
+      private: no
+    - name: "disk_dir"
+      prompt: "Enter disk image path (default: /var/lib/libvirtd/images)"
+      private: no
+      default: "/var/lib/libvirtd/images"
+
+  vars:
+    disk_path: "{{ disk_dir }}/{{ vm_name }}.qcow2"
+
+  tasks:
+
+    - name: Check if disk image exists
+      ansible.builtin.stat:
+        path: "{{ disk_path }}"
+      register: disk_stat
+
+    - name: Fail if disk image does not exist
+      ansible.builtin.fail:
+        msg: "Disk image does not exist at {{ disk_path }}"
+      when: not disk_stat.stat.exists
+
+    - name: Confirm deletion (manual confirmation)
+      ansible.builtin.pause:
+        prompt: "Are you sure you want to delete {{ disk_path }}? Type 'yes' to confirm."
+      register: pause_result
+
+    - name: Delete the QCOW2 disk image
+      ansible.builtin.file:
+        path: "{{ disk_path }}"
+        state: absent
+      when: pause_result.user_input | lower == 'yes'
+
+    - name: Show deletion success message
+      ansible.builtin.debug:
+        msg: "Disk image deleted at {{ disk_path }}"
+      when: pause_result.user_input | lower == 'yes'

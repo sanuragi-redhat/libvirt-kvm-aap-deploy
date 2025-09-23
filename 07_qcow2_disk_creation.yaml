@@ -1,0 +1,70 @@
+---
+- name: Create VM QCOW2 disk with progress
+  hosts: localhost
+  gather_facts: false
+  vars_prompt:
+    - name: "vm_name"
+      prompt: "Enter qcow2 disk name"
+      private: no
+    - name: "disk_size"
+      prompt: "Enter qcow2 disk size in G,P,T,M (e.g., 30G)"
+      private: no
+    - name: "disk_dir"
+      prompt: "Enter disk image path (default: /var/lib/libvirt/images)"
+      private: no
+      default: "/var/lib/libvirt/images"
+
+  vars:
+    disk_path: "{{ disk_dir }}/{{ vm_name }}.qcow2"
+  
+  tasks:
+
+    - name: Check if disk directory exists
+      ansible.builtin.stat:
+        path: "{{ disk_dir }}"
+      register: disk_dir_stat
+
+    - name: Fail if disk directory does not exist
+      ansible.builtin.fail:
+        msg: "Directory {{ disk_dir }} does not exist."
+      when: not disk_dir_stat.stat.exists or not disk_dir_stat.stat.isdir
+
+    - name: Check if disk image already exists
+      ansible.builtin.stat:
+        path: "{{ disk_path }}"
+      register: disk_stat
+
+    - name: Display message if disk already exists
+      ansible.builtin.debug:
+        msg: "Disk image already exists at {{ disk_path }}"
+      when: disk_stat.stat.exists
+
+    - name: Create QCOW2 disk image asynchronously
+      ansible.builtin.command:
+        cmd: qemu-img create -f qcow2 "{{ disk_path }}" "{{ disk_size }}"
+      async: 60
+      poll: 0
+      register: qemu_img_job
+      when: not disk_stat.stat.exists
+
+    - name: Wait for disk image creation to finish (poll every 2 seconds)
+      async_status:
+        jid: "{{ qemu_img_job.ansible_job_id }}"
+      register: job_result
+      until: job_result.finished
+      retries: 30
+      delay: 2
+      when: not disk_stat.stat.exists
+
+    - name: Show final disk creation message
+      ansible.builtin.debug:
+        msg: "Disk image created at {{ disk_path }}"
+      when: not disk_stat.stat.exists
+
+    - name: Display VM information
+      ansible.builtin.debug:
+        msg:
+          - "VM Name: {{ vm_name }}"
+          - "Disk Size: {{ disk_size }}"
+          - "Disk Path: {{ disk_path }}"
+

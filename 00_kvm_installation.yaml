@@ -1,0 +1,130 @@
+---
+- name: KVM installation and setup
+  hosts: localhost
+  ignore_errors: true
+  gather_facts: yes
+  become: yes
+  vars:
+    user_name: "{{ lookup('env', 'USER') }}"
+
+  tasks:
+
+    - name: Check CPU virtualization support
+      shell: lscpu | grep -E 'vmx|svm'
+      register: virt_check
+      ignore_errors: yes
+
+    - name: Fail if virtualization is not supported
+      fail:
+        msg: " Virtualization not supported on this CPU"
+      when: virt_check.rc != 0
+
+    - name: Show virtualization support success
+      debug:
+        msg: " Virtualization supported"
+
+    - name: Update apt package cache
+      apt:
+        update_cache: yes
+      register: apt_update
+      retries: 3
+      delay: 5
+      until: apt_update is succeeded
+
+    - name: Install required packages
+      apt:
+        name:
+          - qemu-kvm
+          - libvirt-daemon-system
+          - libvirt-clients
+          - bridge-utils
+          - virt-manager
+        state: present
+        update_cache: no
+
+    - name: Enable and start libvirtd service
+      systemd:
+        name: libvirtd
+        enabled: yes
+        state: started
+
+    - name: Check if libvirtd service is active
+      systemd:
+        name: libvirtd
+        state: started
+      register: libvirtd_status
+
+    - name: Report libvirtd service status
+      debug:
+        msg: >
+          {% if libvirtd_status.status.ActiveState == 'active' %}
+           libvirtd is active
+          {% else %}
+           libvirtd is not active
+          {% endif %}
+
+    - name: Check if KVM kernel modules are loaded
+      shell: lsmod | grep -qE 'kvm'
+      register: kvm_modules
+      ignore_errors: yes
+
+    - name: Report KVM modules loading status
+      debug:
+        msg: >
+          {% if kvm_modules.rc == 0 %}
+           KVM modules loaded
+          {% else %}
+           KVM modules NOT loaded
+          {% endif %}
+
+    - name: Add user to kvm and libvirt groups
+      user:
+        name: "{{ user_name }}"
+        groups: kvm,libvirt
+        append: yes
+
+    - name: Inform user about group changes
+      debug:
+        msg: " You may need to log out and log back in for group changes to take effect."
+
+    - name: List libvirt networks
+      command: virsh net-list --all
+      register: virsh_networks
+
+    - name: Display libvirt network list or warn if none
+      debug:
+        msg: |
+          {% if virsh_networks.stdout_lines[2:] | select('match', '.+') | list | length == 0 %}
+           No virtual networks found in libvirt.
+          {% else %}
+           Virtual networks found:
+          {{ virsh_networks.stdout_lines[2:] | select('match', '.+') | join('\n') }}
+          {% endif %}
+
+
+    - name: Check if 'default' network is active
+      command: virsh net-info default
+      register: default_net_info
+      failed_when: false
+      changed_when: false
+
+    - name: Start 'default' network if inactive
+      command: virsh net-start default
+      register: start_default_net
+      failed_when: false
+      changed_when: start_default_net.rc == 0
+      when: "'Active: yes' not in default_net_info.stdout"
+    - name: Report network status
+      debug:
+        msg: >
+          {% if 'Active: yes' in default_net_info.stdout %}
+          'default' network is already active.
+          {% elif start_default_net.rc == 0 %}
+          'default' network started successfully.
+          {% else %}
+          'default' network is already active.
+          {% endif %}
+
+    - name: Enable autostart for 'default' network
+      command: virsh net-autostart default
+

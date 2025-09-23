@@ -1,0 +1,21 @@
+---
+- name: Shutdown KVM virtual machine with user input
+  hosts: localhost
+  become: true
+
+  vars_prompt:
+    - name: src_name
+      prompt: "Enter the source VM name to shutdown"
+      private: no
+
+
+  tasks:
+    - name: Shutdown VM using virsh
+      ansible.builtin.command: >
+        virsh destroy {{ src_name }} 
+      register: shut_output
+
+    - name: Show clone command output
+      debug:
+        var: shut_output.stdout_lines
+

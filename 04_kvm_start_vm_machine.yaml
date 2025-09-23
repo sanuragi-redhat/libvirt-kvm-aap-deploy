@@ -1,0 +1,36 @@
+---
+- name: Start KVM virtual machine with user input
+  hosts: localhost
+  become: true
+
+  vars_prompt:
+    - name: src_name
+      prompt: "Enter the source VM name to start (default: service-node)"
+      private: no
+      default: "service-node/servera/serverb"
+
+
+  tasks:
+    - name: Start VM using virsh
+      ansible.builtin.command: >
+        virsh start {{ src_name }} 
+      register: start_output
+
+    - name: Show clone command output
+      debug:
+        var: start_output.stdout_lines
+
+    - name: Pause to allow VM to boot and acquire IP
+      ansible.builtin.pause:
+        minutes: 1
+        prompt: "Waiting 1 minute for VM to boot and acquire an IP..."
+
+    - name: Getting {{ src_name }} IP address 
+      ansible.builtin.command: >
+        virsh domifaddr {{ src_name }} --source agent --full
+      register: vm_ip
+
+    - name: Show {{ src_name }}  IP addres
+      debug:
+        var: vm_ip.stdout_lines
+

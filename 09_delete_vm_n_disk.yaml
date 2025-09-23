@@ -1,0 +1,91 @@
+---
+- name: Destroy VM and delete disk image
+  hosts: localhost
+  gather_facts: false
+
+  vars_prompt:
+    - name: vm_name
+      prompt: "Enter VM name to destroy and delete its disk image"
+      private: no
+
+  vars:
+    disk_path: "/var/lib/libvirtd/images/{{ vm_name }}.qcow2"
+
+  tasks:
+    - name: Validate VM name is not empty
+      ansible.builtin.assert:
+        that:
+          - vm_name | length > 0
+        fail_msg: "VM name cannot be empty."
+
+    - name: Check if VM exists
+      ansible.builtin.command:
+        cmd: virsh dominfo "{{ vm_name }}"
+      register: vm_info
+      ignore_errors: yes
+
+    - name: VM does not exist message
+      ansible.builtin.debug:
+        msg: "VM '{{ vm_name }}' does not exist. Skipping shutdown and undefine."
+      when: vm_info.failed
+
+    - name: Get VM state
+      ansible.builtin.command:
+        cmd: virsh domstate "{{ vm_name }}"
+      register: vm_state
+      failed_when: vm_info.failed
+      changed_when: false
+      when: not vm_info.failed
+
+    - name: Shutdown VM if running
+      ansible.builtin.command:
+        cmd: virsh shutdown "{{ vm_name }}"
+      when:
+        - not vm_info.failed
+        - "'running' in vm_state.stdout"
+
+
+    - name: Force power off VM if still running after wait
+      ansible.builtin.command:
+        cmd: virsh destroy "{{ vm_name }}"
+      when:
+        - not vm_info.failed
+        - wait_result is defined
+        - wait_result.rc != 0
+
+    - name: Undefine VM
+      ansible.builtin.command:
+        cmd: virsh undefine "{{ vm_name }}"
+      when: not vm_info.failed
+
+    - name: Check if disk image exists
+      ansible.builtin.stat:
+        path: "{{ disk_path }}"
+      register: disk_stat
+
+    - name: Inform disk image missing
+      ansible.builtin.debug:
+        msg: "Disk image {{ disk_path }} does not exist or already deleted."
+      when: not disk_stat.stat.exists
+
+    - name: Ask for confirmation before deleting disk image
+      ansible.builtin.pause:
+        prompt: "Are you sure you want to DELETE disk image {{ disk_path }}? This action cannot be undone. (yes/no)"
+      when: disk_stat.stat.exists
+      register: delete_confirm
+
+    - name: Delete disk image file
+      ansible.builtin.file:
+        path: "{{ disk_path }}"
+        state: absent
+      when:
+        - disk_stat.stat.exists
+        - delete_confirm.user_input | lower == 'yes'
+
+    - name: Disk deletion cancelled
+      ansible.builtin.debug:
+        msg: "Deletion cancelled."
+      when:
+        - disk_stat.stat.exists
+        - delete_confirm.user_input | lower != 'yes'
+

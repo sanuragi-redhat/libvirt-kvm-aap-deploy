@@ -1,0 +1,92 @@
+---
+- name: Configure bond, bridges, and VLANs
+  hosts: all
+  become: true
+  vars:
+    bridge0: br-prov
+    bridge1: br-cnv
+    bridge_stp: yes
+    bridge_mtu: 1500
+    bond: bond0
+    bond_slave0: enp1s0
+    bond_slave1: enp7s0
+    bond_mode: active-backup
+    bond_mtu: 1500
+    vlan1: 850
+    vlan2: 698
+    bridge1_ip: 192.168.1.252/24
+    bridge1_gw: 192.168.1.1
+    bridge1_dns: 192.168.1.252
+
+  tasks:
+    - name: Create bridge0
+      ansible.builtin.command:
+        cmd: nmcli con add ifname "{{ bridge0 }}" type bridge con-name "{{ bridge0 }}"
+      args:
+        creates: "/etc/sysconfig/network-scripts/ifcfg-{{ bridge0 }}"
+
+    - name: Configure bridge0 STP and MTU
+      ansible.builtin.command: nmcli con modify "{{ bridge0 }}" bridge.stp "{{ bridge_stp }}"
+    - ansible.builtin.command: nmcli con modify "{{ bridge0 }}" 802-3-ethernet.mtu "{{ bridge_mtu }}"
+
+    - name: Create bridge1
+      ansible.builtin.command:
+        cmd: nmcli con add ifname "{{ bridge1 }}" type bridge con-name "{{ bridge1 }}"
+      args:
+        creates: "/etc/sysconfig/network-scripts/ifcfg-{{ bridge1 }}"
+
+    - name: Configure bridge1 parameters
+      ansible.builtin.shell: |
+        nmcli con modify "{{ bridge1 }}" bridge.stp "{{ bridge_stp }}"
+        nmcli con modify "{{ bridge1 }}" 802-3-ethernet.mtu "{{ bridge_mtu }}"
+        nmcli con modify "{{ bridge1 }}" ipv4.method static ipv4.addresses "{{ bridge1_ip }}" \
+          ipv4.gateway "{{ bridge1_gw }}" ipv4.dns "{{ bridge1_dns }}" ipv6.method ignore
+      args:
+        executable: /bin/bash
+
+    - name: Bring up bridge1
+      ansible.builtin.command: nmcli con up "{{ bridge1 }}"
+
+    - name: Create bond
+      ansible.builtin.command:
+        cmd: nmcli con add type bond ifname "{{ bond }}" con-name "{{ bond }}"
+      args:
+        creates: "/etc/sysconfig/network-scripts/ifcfg-{{ bond }}"
+
+    - name: Configure bond mode and MTU
+      ansible.builtin.shell: |
+        nmcli con modify "{{ bond }}" bond.options mode="{{ bond_mode }}"
+        nmcli con modify "{{ bond }}" 802-3-ethernet.mtu "{{ bond_mtu }}"
+      args:
+        executable: /bin/bash
+
+    - name: Add bond slaves
+      ansible.builtin.shell: |
+        nmcli con add type ethernet con-name "{{ bond }}-slave-{{ bond_slave0 }}" ifname "{{ bond_slave0 }}" master "{{ bond }}"
+        nmcli con add type ethernet con-name "{{ bond }}-slave-{{ bond_slave1 }}" ifname "{{ bond_slave1 }}" master "{{ bond }}"
+        nmcli con modify "{{ bond }}-slave-{{ bond_slave0 }}" 802-3-ethernet.mtu "{{ bond_mtu }}"
+        nmcli con modify "{{ bond }}-slave-{{ bond_slave1 }}" 802-3-ethernet.mtu "{{ bond_mtu }}"
+      args:
+        executable: /bin/bash
+
+    - name: Create VLAN1 and VLAN2 on bond
+      ansible.builtin.shell: |
+        nmcli con add type vlan con-name "{{ bond }}.{{ vlan1 }}" ifname "{{ bond }}.{{ vlan1 }}" dev "{{ bond }}" id "{{ vlan1 }}"
+        nmcli con add type vlan con-name "{{ bond }}.{{ vlan2 }}" ifname "{{ bond }}.{{ vlan2 }}" dev "{{ bond }}" id "{{ vlan2 }}"
+        nmcli con modify "{{ bond }}.{{ vlan1 }}" master "{{ bridge1 }}" slave-type bridge
+        nmcli con modify "{{ bond }}.{{ vlan2 }}" master "{{ bridge1 }}" slave-type bridge
+        nmcli con modify "{{ bond }}.{{ vlan1 }}" 802-3-ethernet.mtu "{{ bridge_mtu }}"
+        nmcli con modify "{{ bond }}.{{ vlan2 }}" 802-3-ethernet.mtu "{{ bridge_mtu }}"
+      args:
+        executable: /bin/bash
+
+    - name: Bring up connections
+      ansible.builtin.shell: |
+        nmcli con up "{{ bond }}"
+        nmcli con up "{{ bond }}.{{ vlan1 }}"
+        nmcli con up "{{ bond }}.{{ vlan2 }}"
+        nmcli con up "{{ bond }}-slave-{{ bond_slave0 }}"
+        nmcli con up "{{ bond }}-slave-{{ bond_slave1 }}"
+        nmcli con up "{{ bridge0 }}"
+      args:
+        executable: /bin/bash

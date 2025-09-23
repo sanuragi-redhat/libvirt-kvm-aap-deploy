@@ -1,0 +1,15 @@
+---
+selfhost:
+  hosts:
+    localhost:
+newvm: 
+  hosts: 
+    service-node.blackhawk.redhatworkshop.in:
+ 
+bastion: 
+  hosts: 
+    bastion.blackhawk.redhatworkshop.in:
+gitlab: 
+  hosts: 
+    gitlab.blackhawk.redhatworkshop.in:
+

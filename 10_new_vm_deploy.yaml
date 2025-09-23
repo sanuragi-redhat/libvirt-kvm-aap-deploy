@@ -1,0 +1,156 @@
+---
+- name: Deploy VM with disk creation and virt-install
+  hosts: localhost
+  gather_facts: false
+
+  vars_prompt:
+    - name: vm_name
+      prompt: "Enter VM name"
+      private: no
+
+    - name: disk_size
+      prompt: "Enter disk size (e.g., 30G)"
+      private: no
+
+    - name: cpu_count
+      prompt: "Enter number of CPUs (e.g., 2)"
+      private: no
+
+    - name: disk_dir
+      prompt: "Enter disk image path (default: /var/lib/libvirt/images)"
+      private: no
+      default: "/var/lib/libvirt/images"
+
+    - name: iso_path
+      prompt: "Enter path to ISO file for installation: alma9.iso rhel-9.5.iso esxi.iso"
+      private: no
+      default: "/var/lib/libvirt/images/alma9.iso"
+    - name: net_name
+      prompt: "Choose default network: (default br0)"
+      private: no
+      default: "default"
+
+  vars:
+    disk_path: "{{ disk_dir }}/{{ vm_name }}.qcow2"
+
+  tasks:
+
+    - name: Validate VM name is not empty
+      ansible.builtin.assert:
+        that:
+          - vm_name | length > 0
+        fail_msg: "VM name cannot be empty."
+
+    - name: Validate disk size is not empty
+      ansible.builtin.assert:
+        that:
+          - disk_size | length > 0
+        fail_msg: "Disk size cannot be empty."
+
+    - name: Validate CPU count is positive integer
+      ansible.builtin.assert:
+        that:
+          - cpu_count is regex('^[0-9]+$')
+          - cpu_count | int > 0
+        fail_msg: "CPU count must be a positive integer."
+
+    - name: Check if disk directory exists
+      ansible.builtin.stat:
+        path: "{{ disk_dir }}"
+      register: disk_dir_stat
+
+    - name: Fail if disk directory does not exist
+      ansible.builtin.fail:
+        msg: "Directory {{ disk_dir }} does not exist."
+      when: not disk_dir_stat.stat.exists or not disk_dir_stat.stat.isdir
+
+    - name: Check if ISO file exists
+      ansible.builtin.stat:
+        path: "{{ iso_path }}"
+      register: iso_stat
+
+    - name: Fail if ISO file not found
+      ansible.builtin.fail:
+        msg: "ISO file not found at {{ iso_path }}"
+      when: not iso_stat.stat.exists or iso_stat.stat.isdir
+
+    - name: Check if disk image already exists
+      ansible.builtin.stat:
+        path: "{{ disk_path }}"
+      register: disk_stat
+
+    - name: Inform disk image exists
+      ansible.builtin.debug:
+        msg: "Disk image already exists at {{ disk_path }}"
+      when: disk_stat.stat.exists
+
+    - name: Create QCOW2 disk image if not exists
+      ansible.builtin.command:
+        cmd: qemu-img create -f qcow2 "{{ disk_path }}" "{{ disk_size }}"
+      async: 60
+      poll: 0
+      register: qemu_img_job
+      when: not disk_stat.stat.exists
+
+    - name: Wait for disk image creation to finish (poll every 3 seconds)
+      async_status:
+        jid: "{{ qemu_img_job.ansible_job_id }}"
+      register: job_result
+      until: job_result.finished
+      retries: 20
+      delay: 3
+      when: not disk_stat.stat.exists
+
+    - name: Inform disk image creation completed
+      ansible.builtin.debug:
+        msg: "Disk image created at {{ disk_path }}"
+      when: not disk_stat.stat.exists
+    - name: Run virt-install using default NAT network
+      ansible.builtin.command:
+        cmd: >
+          virt-install
+          --name {{ vm_name }}
+          --memory 2048
+          --vcpus {{ cpu_count }}
+          --disk path={{ disk_path }},format=qcow2
+          --cdrom {{ iso_path }}
+          --network network={{ net_name }},model=virtio
+          --os-type linux
+          --os-variant ubuntu22.04
+          --graphics vnc,listen=0.0.0.0
+          --noautoconsole
+      when: net_name != 'br0'
+      async: 0
+      poll: 0
+      register: virt_install_job_nat
+
+    - name: Run virt-install using br0 bridge network
+      ansible.builtin.command:
+        cmd: >
+          virt-install
+          --name {{ vm_name }}
+          --memory 2048
+          --vcpus {{ cpu_count }}
+          --disk path={{ disk_path }},format=qcow2
+          --cdrom {{ iso_path }}
+          --network bridge=br0,model=virtio
+          --os-type linux
+          --os-variant ubuntu22.04
+          --graphics vnc,listen=0.0.0.0
+          --noautoconsole
+      when: net_name == 'br0'
+      async: 0
+      poll: 0
+      register: virt_install_job_bridge
+
+    - name: Inform VM installation started
+      ansible.builtin.debug:
+        msg: "VM installation started with virt-install for VM '{{ vm_name }}'. Connect via VNC or console to complete installation."
+    - name: Inform VM installation started
+      ansible.builtin.debug:
+        msg: |
+          VM installation started for '{{ vm_name }}'.
+          You can connect to the VM console via:
+            virsh console {{ vm_name }}
+          or connect to the VNC server (default port 5900 + display number).
+          To exit the console, press Ctrl + ].
