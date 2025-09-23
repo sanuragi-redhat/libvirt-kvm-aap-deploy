@@ -1,6 +1,6 @@
 ---
 - name: KVM installation and setup
-  hosts: localhost
+  hosts: rhel-kvm
   ignore_errors: true
   gather_facts: yes
   become: yes

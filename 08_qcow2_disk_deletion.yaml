@@ -1,6 +1,6 @@
 ---
 - name: Delete VM QCOW2 disk image safely
-  hosts: localhost
+  hosts: rhel-kvm
   gather_facts: false
   vars_prompt:
     - name: "vm_name"

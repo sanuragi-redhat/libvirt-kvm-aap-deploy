@@ -1,6 +1,6 @@
 ---
 - name: Deploy VM with disk creation and virt-install
-  hosts: localhost
+  hosts: rhel-kvm
   gather_facts: false
 
   vars_prompt:

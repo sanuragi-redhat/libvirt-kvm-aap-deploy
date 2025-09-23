@@ -1,6 +1,6 @@
 ---
 - name: Clone a KVM virtual machine with user input
-  hosts: localhost
+  hosts: rhel-kvm
   become: true
 
   vars_prompt:
