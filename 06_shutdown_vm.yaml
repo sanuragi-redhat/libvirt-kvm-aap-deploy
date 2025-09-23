@@ -1,7 +1,6 @@
 ---
 - name: Shutdown KVM virtual machine with user input
   hosts: rhel-kvm
-  become: true
 
   vars_prompt:
     - name: src_name
