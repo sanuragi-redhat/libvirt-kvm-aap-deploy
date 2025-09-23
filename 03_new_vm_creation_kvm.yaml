@@ -96,4 +96,14 @@
         - not disk_stat.stat.exists
 
     - name: Wait for disk image creation to finish (poll every 3 seconds)
-      async_status
+      async_status:
+        jid: "{{ qemu_img_job.ansible_job_id }}"
+      register: job_result
+      until: job_result.finished
+      retries: 20
+      delay: 3
+      when:
+        - not ansible_check_mode
+        - not disk_stat.stat.exists
+        - qemu_img_job is defined
+        - qemu_img_job.ansible_job_id is defined
