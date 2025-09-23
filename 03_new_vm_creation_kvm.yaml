@@ -90,7 +90,10 @@
       async: 60
       poll: 0
       register: qemu_img_job
-      when: not disk_stat.stat.exists
+      when:
+        - not disk_stat.stat.exists
+        - not ansible_check_mode
+
 
     - name: Wait for disk image creation to finish (poll every 3 seconds)
       async_status:
