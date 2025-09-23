@@ -22,9 +22,9 @@
       default: "/var/lib/libvirt/images"
 
     - name: iso_path
-      prompt: "Enter path to ISO file for installation: alma9.iso rhel-9.5.iso esxi.iso"
+      prompt: "Enter path to ISO file for installation: rhel-9.6-x86_64-dvd.iso"
       private: no
-      default: "/var/lib/libvirt/images/alma9.iso"
+      default: "/var/lib/libvirt/images/rhel-9.6-x86_64-dvd.iso"
     - name: net_name
       prompt: "Choose default network: (default br0)"
       private: no

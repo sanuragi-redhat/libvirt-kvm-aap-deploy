@@ -24,7 +24,7 @@
     - name: iso_path
       prompt: "Enter path to ISO file for installation"
       private: no
-      default: "/var/lib/libvirt/images/alma9.iso"
+      default: "/var/lib/libvirt/images/rhel-9.6-x86_64-dvd.iso"
 
     - name: net_name
       prompt: "Enter network name (default: default)"
