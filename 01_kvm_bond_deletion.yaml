@@ -1,6 +1,6 @@
 ---
 - name: Cleanup old bond, VLAN, and bridge configurations
-  hosts: all
+  hosts: rhel-kvm
   become: yes
   vars:
     bridge1: br-prov

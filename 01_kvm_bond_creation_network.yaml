@@ -1,6 +1,6 @@
 ---
 - name: Configure bond, bridges, and VLANs
-  hosts: all
+  hosts: rhel-kvm
   become: true
   vars:
     bridge0: br-prov
